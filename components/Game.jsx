@@ -66,6 +66,7 @@ function newState(difficultyKey){
     events: shuffle(EVENTS).slice(0,2),
     proRisk: shuffle(PROFESSIONAL_RISK).slice(0,proRiskCount),
     usedConditional: [],
+    panamorovEscalation: false,
     pending: [],
     turn:0,
     currentCard:null,
@@ -118,8 +119,10 @@ function pickNextTurn(state){
     const proRisk=[...state.proRisk]; const pr=proRisk.shift();
     return { type:"prorisk", data:pr, proRisk, pending:decayed };
   }
-  // background events (Панаморов, пресса — не зависят от счётчиков)
-  const availableBackground = BACKGROUND_EVENTS.filter(ce => !state.usedConditional.includes(ce.id));
+  // background events (Панаморов, пресса — не зависят от счётчиков, но могут требовать флаг)
+  const availableBackground = BACKGROUND_EVENTS.filter(ce =>
+    !state.usedConditional.includes(ce.id) && (!ce.requires || state[ce.requires])
+  );
   if(availableBackground.length>0 && Math.random()<0.1){
     return { type:"background", data:pick(availableBackground), pending:decayed };
   }
@@ -195,7 +198,9 @@ function reducer(state, action){
         usedConditional = [...usedConditional, state.currentConditionalId];
       }
 
-      const nextState = { ...state, prevCounters, counters, matchedCount, matchedTotal, arcDecisions, pending, usedConditional, lastOutcome: opt };
+      const flagUpdate = opt.setFlag ? { [opt.setFlag]: true } : {};
+
+      const nextState = { ...state, prevCounters, counters, matchedCount, matchedTotal, arcDecisions, pending, usedConditional, lastOutcome: opt, ...flagUpdate };
       const breach = checkBreach(counters);
       if(breach) return { ...nextState, screen:"gameover", gameOver:breach };
       return { ...nextState, screen:"outcome" };
