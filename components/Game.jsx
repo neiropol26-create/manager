@@ -3,7 +3,7 @@ import { useReducer, useEffect, useRef } from "react";
 import {
   COUNTERS_META, SAFE_MIN, SAFE_MAX, DIFFICULTY,
   ARCS_INDIVIDUAL, ARCS_LEGAL, ALL_ARCS,
-  EVENTS, PROFESSIONAL_RISK, CONDITIONAL_EVENTS, MILESTONES, ICONS,
+  EVENTS, PROFESSIONAL_RISK, SUCCESS_EVENTS, BACKGROUND_EVENTS, MILESTONES, ICONS,
   splitLabel
 } from "../lib/gameData";
 
@@ -102,12 +102,12 @@ function pickNextTurn(state){
   }
   const decayed = pending.map(p=>({...p, turns:p.turns-1})).filter(p=>p.turns>=0);
 
-  // conditional (threshold-based) events
-  const availableConditional = CONDITIONAL_EVENTS.filter(ce =>
+  // success-triggered events (только при высоких счётчиках, редко)
+  const availableSuccess = SUCCESS_EVENTS.filter(ce =>
     !state.usedConditional.includes(ce.id) && ce.condition(state.counters)
   );
-  if(availableConditional.length>0 && Math.random()<0.35){
-    return { type:"conditional", data:pick(availableConditional), pending:decayed };
+  if(availableSuccess.length>0 && Math.random()<0.15){
+    return { type:"success", data:pick(availableSuccess), pending:decayed };
   }
 
   if(state.events.length>0 && Math.random()<0.1){
@@ -117,6 +117,11 @@ function pickNextTurn(state){
   if(state.proRisk.length>0 && Math.random()<0.1){
     const proRisk=[...state.proRisk]; const pr=proRisk.shift();
     return { type:"prorisk", data:pr, proRisk, pending:decayed };
+  }
+  // background events (Панаморов, пресса — не зависят от счётчиков)
+  const availableBackground = BACKGROUND_EVENTS.filter(ce => !state.usedConditional.includes(ce.id));
+  if(availableBackground.length>0 && Math.random()<0.1){
+    return { type:"background", data:pick(availableBackground), pending:decayed };
   }
 
   const available = Object.keys(state.arcQueues).filter(k=>state.arcQueues[k].length>0);
@@ -179,13 +184,14 @@ function reducer(state, action){
       }
       let pending = state.pending;
       if(opt.delayed){
+        const split = splitLabel(opt.label);
         pending = [...pending, {
           prob:opt.delayed.prob, turns:opt.delayed.turns, effects:opt.delayed.effects, text:opt.delayed.text,
-          originTurn: state.turn, originArc: state.currentArc
+          originTurn: state.turn, originArc: state.currentArc, originDecision: split.short
         }];
       }
       let usedConditional = state.usedConditional;
-      if(state.isConditional && state.currentConditionalId){
+      if(state.currentConditionalId){
         usedConditional = [...usedConditional, state.currentConditionalId];
       }
 
@@ -228,21 +234,25 @@ function draw(state){
 
   if(res.type==="consequence"){
     const arcLabel = res.data.originArc ? ALL_ARCS.find(a=>a.id===res.data.originArc).label : "личных дел";
-    const originText = 'ORIGIN::Последствие решения на ходу '+res.data.originTurn+' («'+arcLabel+'»)::'+res.data.text;
+    const originText = 'ORIGIN::Последствие решения «'+res.data.originDecision+'» (ход '+res.data.originTurn+', «'+arcLabel+'»)::'+res.data.text;
     return { ...s, screen:"card", currentCard:{ id:"consequence", text:originText, options:[{label:"Понятно", effects:res.data.effects, matched:null}] },
-      currentArc: res.data.originArc, isConsequence:true, isProRisk:false, isConditional:false };
+      currentArc: res.data.originArc, isConsequence:true, isProRisk:false, isConditional:false, currentConditionalId:null };
   }
-  if(res.type==="conditional"){
+  if(res.type==="success"){
     return { ...s, screen:"card", currentCard:res.data, currentArc:null,
       isConsequence:false, isProRisk:false, isConditional:true, currentConditionalId:res.data.id };
   }
+  if(res.type==="background"){
+    return { ...s, screen:"card", currentCard:res.data, currentArc:null,
+      isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:res.data.id };
+  }
   if(res.type==="event"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:false, isConditional:false };
+    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
   }
   if(res.type==="prorisk"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:true, isConditional:false };
+    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:true, isConditional:false, currentConditionalId:null };
   }
-  return { ...s, screen:"card", currentCard:res.data, currentArc:res.arcKey, isConsequence:false, isProRisk:false, isConditional:false };
+  return { ...s, screen:"card", currentCard:res.data, currentArc:res.arcKey, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
 }
 
 /* ============ UI ============ */
