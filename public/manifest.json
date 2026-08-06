@@ -1,0 +1,12 @@
+{
+  "name": "Управляющий",
+  "short_name": "Управляющий",
+  "description": "Карточная игра про арбитражных управляющих",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1B1B1B",
+  "theme_color": "#1B1B1B",
+  "icons": [
+    { "src": "/images/logo-upravlyayushchiy.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

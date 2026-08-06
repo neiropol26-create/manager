@@ -196,6 +196,8 @@
     flex-shrink:0;
   }
   .card-visual svg{ opacity:0.55; }
+  .card-visual-img{ padding:0; }
+  .card-visual-img img{ width:100%; height:100%; object-fit:cover; display:block; }
   .card-visual-label{
     font-family:'IBM Plex Mono',monospace;
     font-size:9.5px;
@@ -221,7 +223,8 @@
     font-weight:600;
     flex-grow:1;
     display:flex;
-    align-items:center;
+    align-items:flex-start;
+    padding-top:6px;
     overflow-y:auto;
   }
   .card-text i{font-style:italic; color:var(--ink-soft); font-weight:400; font-size:0.85em;}
@@ -447,6 +450,10 @@
     .card-text{font-size:18px;}
     .hud{gap:6px;}
     .gauge{padding:7px 8px;}
+    .card{height:78vh; min-height:460px; max-height:640px;}
+    .card-visual{height:90px;}
+    .card-visual svg{width:40px; height:40px;}
+    .card-visual-label{font-size:8.5px;}
   }
 
   .diff-row{

@@ -1,5 +1,5 @@
 "use client";
-import { useReducer, useEffect, useRef } from "react";
+import { useReducer, useEffect, useRef, useState } from "react";
 import {
   COUNTERS_META, SAFE_MIN, SAFE_MAX, DIFFICULTY,
   ARCS_INDIVIDUAL, ARCS_LEGAL, ALL_ARCS,
@@ -283,11 +283,49 @@ function Hud({ counters, turn }){
   );
 }
 
+const STATS_KEY = "upravlyayushchiy_stats_v1";
+
+function loadStats(){
+  if(typeof window==="undefined") return { gamesPlayed:0, bestPct:0, pctSum:0, statsCount:0, bestTurns:0 };
+  try{
+    const raw = window.localStorage.getItem(STATS_KEY);
+    if(!raw) return { gamesPlayed:0, bestPct:0, pctSum:0, statsCount:0, bestTurns:0 };
+    return JSON.parse(raw);
+  } catch(e){ return { gamesPlayed:0, bestPct:0, pctSum:0, statsCount:0, bestTurns:0 }; }
+}
+
+function saveStats(stats){
+  if(typeof window==="undefined") return;
+  try{ window.localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch(e){}
+}
+
+function recordGameEnd(pct, turns){
+  const stats = loadStats();
+  stats.gamesPlayed += 1;
+  stats.pctSum += pct;
+  stats.statsCount += 1;
+  if(pct > stats.bestPct) stats.bestPct = pct;
+  if(turns > stats.bestTurns) stats.bestTurns = turns;
+  saveStats(stats);
+  return stats;
+}
+
 export default function Game(){
   const [state, dispatch] = useReducer(reducer, null, ()=>newState("easy"));
   const [explainOpen, setExplainOpen] = useReducer(x=>!x, false);
   const prevScreenRef = useRef(null);
+  const recordedRef = useRef(false);
   useEffect(()=>{ if(state.screen!=="outcome") setExplainOpen(); }, [state.screen]); // reset toggle on screen change (rough)
+  useEffect(()=>{
+    if((state.screen==="final" || state.screen==="gameover") && !recordedRef.current){
+      recordedRef.current = true;
+      const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
+      recordGameEnd(pct, state.turn);
+    }
+    if(state.screen==="card" || state.screen==="intro"){
+      recordedRef.current = false;
+    }
+  }, [state.screen]);
 
   if(state.screen==="intro") return <Intro dispatch={dispatch} state={state}/>;
   if(state.screen==="milestone") return <Milestone state={state} dispatch={dispatch}/>;
@@ -301,11 +339,19 @@ export default function Game(){
 function Intro({ dispatch, state }){
   const key = state.previewDifficulty || "easy";
   const cfg = DIFFICULTY[key];
+  const [stats, setStats] = useState(null);
+  useEffect(()=>{ setStats(loadStats()); }, []);
   return (
     <div className="app">
       <div className="eyebrow">Карточная игра · v0.4 (Next.js)</div>
       <h1 className="title">Управляющий</h1>
       <div className="subtitle">Вы — арбитражный управляющий. У вас есть время, деньги, репутация и совесть. Постарайтесь не потерять всё четыре одновременно.</div>
+      {stats && stats.gamesPlayed>0 &&
+        <div className="final-stats" style={{marginBottom:"18px"}}>
+          <div>Партий сыграно: {stats.gamesPlayed}</div>
+          <div>Лучший результат: {stats.bestPct}%</div>
+        </div>
+      }
       <div className="intro-card">
         <div className="gauge-label">Уровень сложности</div>
         <div className="diff-row">
@@ -342,6 +388,24 @@ function Milestone({ state, dispatch }){
   );
 }
 
+function CardVisual({ visual }){
+  const [failed, setFailed] = useState(false);
+  useEffect(()=>{ setFailed(false); }, [visual.file]);
+  if(failed){
+    return (
+      <div className="card-visual">
+        <div dangerouslySetInnerHTML={{__html: visual.icon}} />
+        <div className="card-visual-label">[ЗАГЛУШКА] {visual.file} · {visual.size}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card-visual card-visual-img">
+      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)} />
+    </div>
+  );
+}
+
 function CardScreen({ state, dispatch }){
   const c = state.currentCard;
   const visual = getVisual(state);
@@ -363,9 +427,7 @@ function CardScreen({ state, dispatch }){
     <div className="app">
       <Hud counters={state.counters} turn={state.turn}/>
       <div className="card">
-        <div className="card-visual" dangerouslySetInnerHTML={{__html: visual.icon}}>
-        </div>
-        <div className="card-visual-label">[ЗАГЛУШКА] {visual.file} · {visual.size}</div>
+        <CardVisual visual={visual}/>
         <div className="card-tag">{tag.toUpperCase()}</div>
         <div className="card-text">
           {originLine && <span className="consequence-origin">{originLine}</span>}
@@ -436,10 +498,37 @@ function GameOverScreen({ state, dispatch }){
   );
 }
 
+function ShareButton({ text }){
+  const [status, setStatus] = useState("idle");
+  async function onShare(){
+    if(navigator.share){
+      try{
+        await navigator.share({ text, title:"Управляющий" });
+        return;
+      } catch(e){
+        // пользователь отменил или API недоступен по факту — тихо переходим к копированию
+      }
+    }
+    try{
+      await navigator.clipboard.writeText(text);
+      setStatus("copied");
+      setTimeout(()=>setStatus("idle"), 2000);
+    } catch(e){
+      setStatus("error");
+      setTimeout(()=>setStatus("idle"), 2000);
+    }
+  }
+  return (
+    <button className="btn btn-outcome" onClick={onShare} style={{width:"100%", marginBottom:"14px"}}>
+      {status==="copied" ? "Скопировано ✓" : status==="error" ? "Не получилось скопировать" : "Поделиться результатом"}
+    </button>
+  );
+}
+
 function FinalScreen({ state, dispatch }){
   const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
   const outcomes = state.selectedArcs.map(a=>arcOutcome(state, a.id));
-  const shareText = "УПРАВЛЯЮЩИЙ\n\n"+state.selectedArcs.map((a,i)=>a.label+": "+outcomes[i].title).join("\n")+"\nСовпадение с практикой ВС РФ: "+pct+"%\n\nА вы продержитесь дольше?";
+  const shareText = "УПРАВЛЯЮЩИЙ\n\n"+state.selectedArcs.map((a,i)=>a.label+": "+outcomes[i].title).join("\n")+"\nСовпадение с практикой ВС РФ: "+pct+"%\n\nА вы продержитесь дольше? poluianov.ru";
   return (
     <div className="app">
       <div className="eyebrow">Итоги смены</div>
@@ -456,6 +545,7 @@ function FinalScreen({ state, dispatch }){
         <div>Совпадение с практикой ВС: {pct}%</div>
       </div>
       <div className="share-preview">{shareText.split("\n").map((line,i)=><div key={i}>{line}&nbsp;</div>)}</div>
+      <ShareButton text={shareText}/>
       <button className="btn btn-primary" onClick={()=>dispatch({type:"RESTART"})}>Играть снова</button>
       <div className="footer-note">ПРОТОТИП · NEXT.JS</div>
     </div>
