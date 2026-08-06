@@ -103,7 +103,6 @@ function pickNextTurn(state){
   }
   const decayed = pending.map(p=>({...p, turns:p.turns-1})).filter(p=>p.turns>=0);
 
-  // success-triggered events (только при высоких счётчиках, редко)
   const availableSuccess = SUCCESS_EVENTS.filter(ce =>
     !state.usedConditional.includes(ce.id) && ce.condition(state.counters)
   );
@@ -119,7 +118,6 @@ function pickNextTurn(state){
     const proRisk=[...state.proRisk]; const pr=proRisk.shift();
     return { type:"prorisk", data:pr, proRisk, pending:decayed };
   }
-  // background events (Панаморов, пресса — не зависят от счётчиков, но могут требовать флаг)
   const availableBackground = BACKGROUND_EVENTS.filter(ce =>
     !state.usedConditional.includes(ce.id) && (!ce.requires || state[ce.requires])
   );
@@ -338,12 +336,12 @@ function recordGameEnd(pct, turns){
   return stats;
 }
 
+/* ============ GAME (персистентная оболочка — HUD не пересоздаётся между экранами) ============ */
+
 export default function Game(){
   const [state, dispatch] = useReducer(reducer, null, ()=>newState("easy"));
-  const [explainOpen, setExplainOpen] = useReducer(x=>!x, false);
-  const prevScreenRef = useRef(null);
   const recordedRef = useRef(false);
-  useEffect(()=>{ if(state.screen!=="outcome") setExplainOpen(); }, [state.screen]); // reset toggle on screen change (rough)
+
   useEffect(()=>{
     if((state.screen==="final" || state.screen==="gameover") && !recordedRef.current){
       recordedRef.current = true;
@@ -355,23 +353,28 @@ export default function Game(){
     }
   }, [state.screen]);
 
-  if(state.screen==="intro") return <Intro dispatch={dispatch} state={state}/>;
-  if(state.screen==="milestone") return <Milestone state={state} dispatch={dispatch}/>;
-  if(state.screen==="card") return <CardScreen state={state} dispatch={dispatch}/>;
-  if(state.screen==="outcome") return <OutcomeScreen state={state} dispatch={dispatch}/>;
-  if(state.screen==="gameover") return <GameOverScreen state={state} dispatch={dispatch}/>;
-  if(state.screen==="final") return <FinalScreen state={state} dispatch={dispatch}/>;
-  return null;
+  const showHud = ["card","outcome","milestone","gameover"].includes(state.screen);
+
+  return (
+    <div className="app">
+      {showHud && <Hud counters={state.counters} turn={state.turn}/>}
+      {state.screen==="intro" && <IntroBody dispatch={dispatch} state={state}/>}
+      {state.screen==="milestone" && <MilestoneBody state={state} dispatch={dispatch}/>}
+      {state.screen==="card" && <CardBody state={state} dispatch={dispatch}/>}
+      {state.screen==="outcome" && <OutcomeBody state={state} dispatch={dispatch}/>}
+      {state.screen==="gameover" && <GameOverBody state={state} dispatch={dispatch}/>}
+      {state.screen==="final" && <FinalBody state={state} dispatch={dispatch}/>}
+    </div>
+  );
 }
 
-function Intro({ dispatch, state }){
+function IntroBody({ dispatch, state }){
   const key = state.previewDifficulty || "easy";
   const cfg = DIFFICULTY[key];
   const [stats, setStats] = useState(null);
   useEffect(()=>{ setStats(loadStats()); }, []);
   return (
-    <div className="app">
-      <div className="eyebrow">Карточная игра · v0.4 (Next.js)</div>
+    <>
       <h1 className="title">Управляющий</h1>
       <div className="subtitle">Вы — арбитражный управляющий. У вас есть время, деньги, репутация и совесть. Постарайтесь не потерять всё четыре одновременно.</div>
       {stats && stats.gamesPlayed>0 &&
@@ -388,6 +391,10 @@ function Intro({ dispatch, state }){
               onClick={()=>dispatch({type:"SET_DIFFICULTY_PREVIEW", key:k})}>{DIFFICULTY[k].label}</button>
           ))}
         </div>
+        <div className="diff-meta">
+          <span className="diff-chip">{cfg.arcCount} дела одновременно</span>
+          <span className="diff-chip">{cfg.detail==="full" ? "Полные варианты ответа" : "Краткие варианты ответа"}</span>
+        </div>
         <div className="diff-hint">{cfg.hint}</div>
         <div className="intro-rules" dangerouslySetInnerHTML={{__html:
           "→ <b>Время / Деньги / Законность / Репутация</b> — четыре шкалы, 0–100.<br>"+
@@ -399,19 +406,15 @@ function Intro({ dispatch, state }){
         }}/>
         <button className="btn btn-primary" onClick={()=>dispatch({type:"START", key})}>Начать смену</button>
       </div>
-      <div className="footer-note">ПРОТОТИП · NEXT.JS</div>
-    </div>
+    </>
   );
 }
 
-function Milestone({ state, dispatch }){
+function MilestoneBody({ state, dispatch }){
   return (
-    <div className="app">
-      <Hud counters={state.counters} turn={state.turn}/>
-      <div className="milestone">
-        <div className="milestone-line">«{state.milestoneLine}»</div>
-        <button className="btn btn-primary" onClick={()=>dispatch({type:"CONTINUE"})}>Продолжить</button>
-      </div>
+    <div className="milestone">
+      <div className="milestone-line">«{state.milestoneLine}»</div>
+      <button className="btn btn-primary" onClick={()=>dispatch({type:"CONTINUE"})}>Продолжить</button>
     </div>
   );
 }
@@ -419,6 +422,7 @@ function Milestone({ state, dispatch }){
 function CardVisual({ visual }){
   const [failed, setFailed] = useState(false);
   useEffect(()=>{ setFailed(false); }, [visual.file]);
+  const isPersona = visual.file.startsWith("persona-");
   if(failed){
     return (
       <div className="card-visual">
@@ -429,12 +433,13 @@ function CardVisual({ visual }){
   }
   return (
     <div className="card-visual card-visual-img">
-      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)} />
+      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
+        style={{ objectFit: isPersona ? "contain" : "cover" }} />
     </div>
   );
 }
 
-function CardScreen({ state, dispatch }){
+function CardBody({ state, dispatch }){
   const c = state.currentCard;
   const visual = getVisual(state);
   let tag = "СЛУЧАЙ";
@@ -452,67 +457,56 @@ function CardScreen({ state, dispatch }){
   }
 
   return (
-    <div className="app">
-      <Hud counters={state.counters} turn={state.turn}/>
-      <div className="card">
-        <CardVisual visual={visual}/>
-        <div className="card-tag">{tag.toUpperCase()}</div>
-        <div className="card-text">
-          {originLine && <span className="consequence-origin">{originLine}</span>}
-          {bodyText}
-        </div>
-        <div className="options">
-          {c.options.map((opt,idx)=>{
-            const split = splitLabel(opt.label);
-            const shown = state.detail==="full" ? split.full : split.short;
-            return (
-              <button key={idx} className="option-btn" onClick={()=>dispatch({type:"CHOOSE", opt})}>
-                <span className="option-letter">{String.fromCharCode(65+idx)}</span>{shown}
-              </button>
-            );
-          })}
-        </div>
+    <div className="card">
+      <CardVisual visual={visual}/>
+      <div className="card-tag">{tag.toUpperCase()}</div>
+      <div className="card-text">
+        {originLine && <span className="consequence-origin">{originLine}</span>}
+        {bodyText}
+      </div>
+      <div className="options">
+        {c.options.map((opt,idx)=>{
+          const split = splitLabel(opt.label);
+          const shown = state.detail==="full" ? split.full : split.short;
+          return (
+            <button key={idx} className="option-btn" onClick={()=>dispatch({type:"CHOOSE", opt})}>
+              <span className="option-letter">{String.fromCharCode(65+idx)}</span>{shown}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function OutcomeScreen({ state, dispatch }){
+function OutcomeBody({ state, dispatch }){
   const opt = state.lastOutcome;
-  return <OutcomeInner state={state} dispatch={dispatch} opt={opt} nextAction={{type:"CONTINUE"}}/>;
-}
-
-function OutcomeInner({ state, dispatch, opt, nextAction }){
   const [open, toggle] = useReducer(x=>!x, false);
   return (
-    <div className="app">
-      <Hud counters={state.counters} turn={state.turn}/>
-      <div className="outcome">
-        {opt.matched===true && <div className="stamp match">КАК У ВС РФ</div>}
-        <div className="outcome-text">Решение принято.</div>
-        <div className="deltas">
-          {Object.keys(opt.effects).map(k=>{
-            const v = opt.effects[k];
-            return <div key={k} className={"delta "+(v>=0?"pos":"neg")}>{COUNTERS_META[k].label} {v>=0?"+":""}{v}</div>;
-          })}
-        </div>
-        <div className="outcome-actions">
-          {opt.explanation && <button className="btn btn-explain" onClick={toggle}>Объяснить</button>}
-          <button className="btn btn-outcome" onClick={()=>dispatch(nextAction)}>Продолжить</button>
-        </div>
-        {opt.explanation && <div className={"explain-box"+(open?" open":"")}><b>Как на самом деле:</b> {opt.explanation}</div>}
+    <div className="outcome">
+      {opt.matched===true && <div className="stamp match">КАК У ВС РФ</div>}
+      <div className="outcome-text">Решение принято.</div>
+      <div className="deltas">
+        {Object.keys(opt.effects).map(k=>{
+          const v = opt.effects[k];
+          return <div key={k} className={"delta "+(v>=0?"pos":"neg")}>{COUNTERS_META[k].label} {v>=0?"+":""}{v}</div>;
+        })}
       </div>
+      <div className="outcome-actions">
+        {opt.explanation && <button className="btn btn-explain" onClick={toggle}>Объяснить</button>}
+        <button className="btn btn-outcome" onClick={()=>dispatch({type:"CONTINUE"})}>Продолжить</button>
+      </div>
+      {opt.explanation && <div className={"explain-box"+(open?" open":"")}><b>Как на самом деле:</b> {opt.explanation}</div>}
     </div>
   );
 }
 
-function GameOverScreen({ state, dispatch }){
+function GameOverBody({ state, dispatch }){
   const key = state.gameOver.counter+"_"+state.gameOver.dir;
   const info = BREACH_TEXT[key];
   const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
   return (
-    <div className="app">
-      <Hud counters={state.counters} turn={state.turn}/>
+    <>
       <div className="final-block">
         <div className="gameover-title">{info.title}</div>
         <div className="final-arc-desc">{info.desc}</div>
@@ -522,43 +516,156 @@ function GameOverScreen({ state, dispatch }){
         <div>Совпадение с практикой ВС: {pct}%</div>
       </div>
       <button className="btn btn-primary" onClick={()=>dispatch({type:"RESTART"})}>Начать заново</button>
-    </div>
+    </>
   );
 }
 
-function ShareButton({ text }){
-  const [status, setStatus] = useState("idle");
-  async function onShare(){
-    if(navigator.share){
-      try{
-        await navigator.share({ text, title:"Управляющий" });
-        return;
-      } catch(e){
-        // пользователь отменил или API недоступен по факту — тихо переходим к копированию
-      }
-    }
-    try{
-      await navigator.clipboard.writeText(text);
-      setStatus("copied");
-      setTimeout(()=>setStatus("idle"), 2000);
-    } catch(e){
-      setStatus("error");
-      setTimeout(()=>setStatus("idle"), 2000);
+/* ============ ГРАФИЧЕСКАЯ ШЕР-КАРТОЧКА ============ */
+
+async function generateShareImage(state, outcomes, pct){
+  const W = 1080, H = 1080;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+
+  ctx.fillStyle = "#1B1B1B";
+  ctx.fillRect(0,0,W,H);
+
+  ctx.strokeStyle = "rgba(133,219,24,0.14)";
+  ctx.lineWidth = 1;
+  for(let y=80; y<H; y+=42){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = "#284907";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(28,28,W-56,H-56);
+
+  ctx.fillStyle = "#85DB18";
+  ctx.font = "900 64px 'Playfair Display', serif";
+  ctx.textBaseline = "top";
+  ctx.fillText("УПРАВЛЯЮЩИЙ", 70, 90);
+
+  ctx.fillStyle = "#5f7a4a";
+  ctx.font = "500 22px 'IBM Plex Mono', monospace";
+  ctx.fillText("ИТОГИ СМЕНЫ", 74, 172);
+
+  let y = 260;
+  state.selectedArcs.forEach((arc,i)=>{
+    ctx.font = "600 26px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = "#5f7a4a";
+    ctx.fillText(arc.label.toUpperCase(), 74, y);
+    y += 40;
+    ctx.font = "700 36px 'Playfair Display', serif";
+    ctx.fillStyle = "#eaf5df";
+    wrapText(ctx, outcomes[i].title, 74, y, W-148, 42);
+    y += 100;
+  });
+
+  y += 20;
+  ctx.strokeStyle = "rgba(133,219,24,0.3)";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(74,y); ctx.lineTo(W-74,y); ctx.stroke();
+  y += 50;
+
+  ctx.fillStyle = "#5f7a4a";
+  ctx.font = "500 22px 'IBM Plex Mono', monospace";
+  ctx.fillText("СОВПАДЕНИЕ С ПРАКТИКОЙ ВС РФ", 74, y);
+  y += 46;
+  ctx.fillStyle = "#85DB18";
+  ctx.font = "900 120px 'IBM Plex Mono', monospace";
+  ctx.fillText(pct+"%", 74, y);
+
+  ctx.fillStyle = "#eaf5df";
+  ctx.font = "italic 600 32px 'Playfair Display', serif";
+  ctx.fillText("А вы продержитесь дольше?", 74, H-150);
+
+  ctx.fillStyle = "#284907";
+  ctx.font = "600 24px 'IBM Plex Mono', monospace";
+  ctx.fillText("poluianov.ru", 74, H-90);
+
+  return new Promise(resolve=>canvas.toBlob(resolve, "image/png"));
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = text.split(" ");
+  let line = "";
+  let curY = y;
+  for(let i=0;i<words.length;i++){
+    const test = line + words[i] + " ";
+    if(ctx.measureText(test).width > maxWidth && line !== ""){
+      ctx.fillText(line, x, curY);
+      line = words[i] + " ";
+      curY += lineHeight;
+    } else {
+      line = test;
     }
   }
+  ctx.fillText(line, x, curY);
+}
+
+function ShareButton({ state, outcomes, pct, shareText }){
+  const [status, setStatus] = useState("idle");
+
+  async function onShare(){
+    setStatus("busy");
+    try{
+      const blob = await generateShareImage(state, outcomes, pct);
+      const file = new File([blob], "upravlyayushchiy-result.png", { type:"image/png" });
+
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title:"Управляющий", text:shareText });
+        setStatus("idle");
+        return;
+      }
+      if(navigator.clipboard && window.ClipboardItem){
+        try{
+          await navigator.clipboard.write([ new window.ClipboardItem({ "image/png": blob }) ]);
+          setStatus("copied-image");
+          setTimeout(()=>setStatus("idle"), 2500);
+          return;
+        } catch(e){ /* переходим к скачиванию */ }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "upravlyayushchiy-result.png";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus("downloaded");
+      setTimeout(()=>setStatus("idle"), 2500);
+    } catch(e){
+      try{
+        await navigator.clipboard.writeText(shareText);
+        setStatus("copied-text");
+      } catch(e2){ setStatus("error"); }
+      setTimeout(()=>setStatus("idle"), 2500);
+    }
+  }
+
+  const labels = {
+    idle: "Поделиться результатом",
+    busy: "Готовим картинку…",
+    "copied-image": "Картинка скопирована ✓",
+    "copied-text": "Текст скопирован ✓",
+    downloaded: "Картинка сохранена ✓",
+    error: "Не получилось — попробуйте ещё раз"
+  };
+
   return (
-    <button className="btn btn-outcome" onClick={onShare} style={{width:"100%", marginBottom:"14px"}}>
-      {status==="copied" ? "Скопировано ✓" : status==="error" ? "Не получилось скопировать" : "Поделиться результатом"}
+    <button className="btn btn-outcome" onClick={onShare} disabled={status==="busy"} style={{width:"100%", marginBottom:"14px"}}>
+      {labels[status]}
     </button>
   );
 }
 
-function FinalScreen({ state, dispatch }){
+function FinalBody({ state, dispatch }){
   const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
   const outcomes = state.selectedArcs.map(a=>arcOutcome(state, a.id));
   const shareText = "УПРАВЛЯЮЩИЙ\n\n"+state.selectedArcs.map((a,i)=>a.label+": "+outcomes[i].title).join("\n")+"\nСовпадение с практикой ВС РФ: "+pct+"%\n\nА вы продержитесь дольше? poluianov.ru";
   return (
-    <div className="app">
+    <>
       <div className="eyebrow">Итоги смены</div>
       <h1 className="title">Готово.</h1>
       {state.selectedArcs.map((arc,i)=>(
@@ -572,10 +679,8 @@ function FinalScreen({ state, dispatch }){
         <div>Ходов: {state.turn}</div>
         <div>Совпадение с практикой ВС: {pct}%</div>
       </div>
-      <div className="share-preview">{shareText.split("\n").map((line,i)=><div key={i}>{line}&nbsp;</div>)}</div>
-      <ShareButton text={shareText}/>
+      <ShareButton state={state} outcomes={outcomes} pct={pct} shareText={shareText}/>
       <button className="btn btn-primary" onClick={()=>dispatch({type:"RESTART"})}>Играть снова</button>
-      <div className="footer-note">ПРОТОТИП · NEXT.JS</div>
-    </div>
+    </>
   );
 }
