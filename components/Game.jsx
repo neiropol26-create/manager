@@ -263,11 +263,39 @@ function draw(state){
 /* ============ UI ============ */
 
 function Gauge({ k, value }){
+  const [displayed, setDisplayed] = useState(value);
+  const [pulsing, setPulsing] = useState(false);
+  const displayedRef = useRef(value);
+  const rafRef = useRef(null);
+  const firstRender = useRef(true);
+
+  useEffect(()=>{
+    if(firstRender.current){ firstRender.current = false; displayedRef.current = value; return; }
+    cancelAnimationFrame(rafRef.current);
+    const from = displayedRef.current;
+    const to = value;
+    if(Math.abs(from-to)<0.01) return;
+    setPulsing(true);
+    const duration = 700;
+    const t0 = performance.now();
+    function step(now){
+      const p = Math.min(1, (now-t0)/duration);
+      const eased = 1-Math.pow(1-p,3);
+      const v = from + (to-from)*eased;
+      displayedRef.current = v;
+      setDisplayed(v);
+      if(p<1){ rafRef.current = requestAnimationFrame(step); }
+      else { setPulsing(false); }
+    }
+    rafRef.current = requestAnimationFrame(step);
+    return ()=>cancelAnimationFrame(rafRef.current);
+  }, [value]);
+
   return (
-    <div className={"gauge"}>
+    <div className={"gauge"+(pulsing?" pulse":"")}>
       <div className="gauge-label">{COUNTERS_META[k].label}</div>
-      <div className="gauge-bar"><div className={"gauge-fill "+gaugeClass(value)} style={{width:value+"%"}}/></div>
-      <div className="gauge-val">{Math.round(value)}</div>
+      <div className="gauge-bar"><div className={"gauge-fill "+gaugeClass(displayed)} style={{width:displayed+"%"}}/></div>
+      <div className="gauge-val">{Math.round(displayed)}</div>
     </div>
   );
 }
