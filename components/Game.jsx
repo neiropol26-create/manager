@@ -3,7 +3,8 @@ import { useReducer, useEffect, useRef, useState } from "react";
 import {
   COUNTERS_META, SAFE_MIN, SAFE_MAX, DIFFICULTY,
   ARCS_INDIVIDUAL, ARCS_LEGAL, ALL_ARCS,
-  EVENTS, PROFESSIONAL_RISK, SUCCESS_EVENTS, BACKGROUND_EVENTS, MILESTONES, ICONS
+  EVENTS, PROFESSIONAL_RISK, SUCCESS_EVENTS, BACKGROUND_EVENTS, MILESTONES, ICONS,
+  CONSULT_LOSS, CONSULT_WIN
 } from "../lib/gameData";
 
 function freshCounters(){ return { time:50, money:50, legality:50, reputation:50 }; }
@@ -338,20 +339,62 @@ function recordGameEnd(pct, turns){
   return stats;
 }
 
+const CONSULT_EMAIL = "vladimir@poluianov.ru";
+const CONSULT_TELEGRAM = "https://t.me/poluianov_ru";
+
+function getConsultText(state){
+  if(state.screen==="gameover"){
+    const key = state.gameOver.counter+"_"+state.gameOver.dir;
+    return CONSULT_LOSS[key] || null;
+  }
+  const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
+  if(pct>=80) return CONSULT_WIN.high;
+  if(pct>=40) return CONSULT_WIN.mid;
+  return CONSULT_WIN.low;
+}
+
+function ConsultModal({ state, onClose }){
+  const [copied, setCopied] = useState(false);
+  async function copyEmail(){
+    try{ await navigator.clipboard.writeText(CONSULT_EMAIL); setCopied(true); setTimeout(()=>setCopied(false), 2000); }
+    catch(e){ /* ignore */ }
+  }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={(e)=>e.stopPropagation()}>
+        <div className="modal-title">Похоже на реальную практику?</div>
+        <div className="modal-text">{getConsultText(state)}</div>
+        <div className="modal-row">
+          <span className="modal-email">{CONSULT_EMAIL}</span>
+          <button className="btn btn-explain" onClick={copyEmail}>{copied ? "Скопировано ✓" : "Скопировать"}</button>
+        </div>
+        <a className="btn btn-outcome" style={{display:"block", textAlign:"center", textDecoration:"none", marginTop:"10px"}}
+          href={CONSULT_TELEGRAM} target="_blank" rel="noopener noreferrer">
+          Записаться в Telegram
+        </a>
+        <button className="btn btn-ghost" style={{width:"100%", marginTop:"10px"}} onClick={onClose}>Не сейчас</button>
+      </div>
+    </div>
+  );
+}
+
 /* ============ GAME (персистентная оболочка — HUD не пересоздаётся между экранами) ============ */
 
 export default function Game(){
   const [state, dispatch] = useReducer(reducer, null, ()=>newState("easy"));
   const recordedRef = useRef(false);
+  const [showConsult, setShowConsult] = useState(false);
 
   useEffect(()=>{
     if((state.screen==="final" || state.screen==="gameover") && !recordedRef.current){
       recordedRef.current = true;
       const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
-      recordGameEnd(pct, state.turn);
+      const stats = recordGameEnd(pct, state.turn);
+      if(stats.gamesPlayed % 2 === 0 && getConsultText(state)) setShowConsult(true);
     }
     if(state.screen==="card" || state.screen==="intro"){
       recordedRef.current = false;
+      setShowConsult(false);
     }
   }, [state.screen]);
 
@@ -366,6 +409,8 @@ export default function Game(){
       {state.screen==="outcome" && <OutcomeBody state={state} dispatch={dispatch}/>}
       {state.screen==="gameover" && <GameOverBody state={state} dispatch={dispatch}/>}
       {state.screen==="final" && <FinalBody state={state} dispatch={dispatch}/>}
+      {showConsult && (state.screen==="final" || state.screen==="gameover") &&
+        <ConsultModal state={state} onClose={()=>setShowConsult(false)}/>}
     </div>
   );
 }
