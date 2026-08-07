@@ -426,26 +426,19 @@ function CardVisual({ visual }){
   useEffect(()=>{ setFailed(false); }, [visual.file]);
   const isPersona = visual.file.startsWith("persona-");
   const isIcon = visual.file.startsWith("icon-");
+  const modifier = isPersona ? " card-visual--persona" : isIcon ? " card-visual--icon" : "";
+
   if(failed){
     return (
-      <div className="card-visual">
+      <div className={"card-visual"+modifier}>
         <div dangerouslySetInnerHTML={{__html: visual.icon}} />
         <div className="card-visual-label">[ЗАГЛУШКА] {visual.file} · {visual.size}</div>
       </div>
     );
   }
-  if(isIcon){
-    return (
-      <div className="card-visual">
-        <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
-          style={{ width:"auto", height:"64%", maxWidth:"70%", objectFit:"contain" }} />
-      </div>
-    );
-  }
   return (
-    <div className="card-visual card-visual-img">
-      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
-        style={{ objectFit: isPersona ? "contain" : "cover" }} />
+    <div className={"card-visual card-visual-img"+modifier}>
+      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)} />
     </div>
   );
 }
