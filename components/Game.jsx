@@ -436,9 +436,18 @@ function CardVisual({ visual }){
       </div>
     );
   }
+  if(isIcon){
+    return (
+      <div className={"card-visual"+modifier} style={{height:"110px"}}>
+        <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
+          style={{ width:"auto", height:"auto", maxWidth:"75%", maxHeight:"75%", objectFit:"contain" }} />
+      </div>
+    );
+  }
   return (
     <div className={"card-visual card-visual-img"+modifier}>
-      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)} />
+      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
+        style={ isPersona ? { objectFit:"contain" } : undefined } />
     </div>
   );
 }

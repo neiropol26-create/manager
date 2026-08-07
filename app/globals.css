@@ -195,13 +195,12 @@
     gap:8px;
     flex-shrink:0;
   }
-  .card-visual--persona{ height:260px; }
+  .card-visual--persona{ height:190px; }
   .card-visual--icon{ height:100px; }
   .card-visual svg{ opacity:0.55; }
   .card-visual-img{ padding:0; }
   .card-visual-img img{ width:100%; height:100%; object-fit:cover; display:block; }
-  .card-visual--persona img{ object-position:50% 15%; }
-  .card-visual--icon img{ width:auto; height:auto; max-width:78%; max-height:78%; object-fit:contain; }
+  .card-visual--persona img{ object-fit:contain; object-position:50% 50%; }
   .card-visual-label{
     font-family:'IBM Plex Mono',monospace;
     font-size:9.5px;
@@ -520,7 +519,7 @@
     .gauge{padding:7px 8px;}
     .card{height:78vh; min-height:460px; max-height:640px;}
     .card-visual{height:110px;}
-    .card-visual--persona{height:170px;}
+    .card-visual--persona{height:150px;}
     .card-visual--icon{height:80px;}
     .card-visual svg{width:40px; height:40px;}
     .card-visual-label{font-size:8.5px;}
