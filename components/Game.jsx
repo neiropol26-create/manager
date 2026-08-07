@@ -436,18 +436,9 @@ function CardVisual({ visual }){
       </div>
     );
   }
-  if(isIcon){
-    return (
-      <div className={"card-visual"+modifier}>
-        <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
-          style={{ width:"92%", height:"92%", objectFit:"contain" }} />
-      </div>
-    );
-  }
   return (
     <div className={"card-visual card-visual-img"+modifier}>
-      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
-        style={ isPersona ? { objectFit:"contain" } : undefined } />
+      <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)} />
     </div>
   );
 }
