@@ -1,4 +1,5 @@
 import "./globals.css";
+import BugLink from "../components/BugLink";
 
 export const metadata = {
   title: "Управляющий",
@@ -26,9 +27,7 @@ export default function RootLayout({ children }) {
         <a className="site-link" href="https://poluianov.ru" target="_blank" rel="noopener noreferrer">
           poluianov.ru
         </a>
-        <a className="bug-link" href="mailto:vladimir@poluianov.ru?subject=Ошибки%20в%20игре%20Управляющий">
-          Нашли ошибку? Напишите!
-        </a>
+        <BugLink/>
       </body>
     </html>
   );

@@ -3,8 +3,7 @@ import { useReducer, useEffect, useRef, useState } from "react";
 import {
   COUNTERS_META, SAFE_MIN, SAFE_MAX, DIFFICULTY,
   ARCS_INDIVIDUAL, ARCS_LEGAL, ALL_ARCS,
-  EVENTS, PROFESSIONAL_RISK, SUCCESS_EVENTS, BACKGROUND_EVENTS, MILESTONES, ICONS,
-  splitLabel
+  EVENTS, PROFESSIONAL_RISK, SUCCESS_EVENTS, BACKGROUND_EVENTS, MILESTONES, ICONS
 } from "../lib/gameData";
 
 function freshCounters(){ return { time:50, money:50, legality:50, reputation:50 }; }
@@ -185,10 +184,9 @@ function reducer(state, action){
       }
       let pending = state.pending;
       if(opt.delayed){
-        const split = splitLabel(opt.label);
         pending = [...pending, {
           prob:opt.delayed.prob, turns:opt.delayed.turns, effects:opt.delayed.effects, text:opt.delayed.text,
-          originTurn: state.turn, originArc: state.currentArc, originDecision: split.short
+          originTurn: state.turn, originArc: state.currentArc, originDecision: opt.shortLabel || opt.label
         }];
       }
       let usedConditional = state.usedConditional;
@@ -208,7 +206,7 @@ function reducer(state, action){
     }
     case "RESTART": {
       const s = newState(state.difficultyKey);
-      return advance({...s, screen:"card"});
+      return { ...s, screen:"intro", previewDifficulty: state.difficultyKey };
     }
     case "BACK_TO_INTRO":
       return newState("easy");
@@ -225,6 +223,10 @@ function advance(state){
   return draw(s);
 }
 
+function shuffleOptions(card){
+  return { ...card, options: shuffle(card.options) };
+}
+
 function draw(state){
   const res = pickNextTurn(state);
   let s = { ...state };
@@ -237,25 +239,25 @@ function draw(state){
 
   if(res.type==="consequence"){
     const arcLabel = res.data.originArc ? ALL_ARCS.find(a=>a.id===res.data.originArc).label : "личных дел";
-    const originText = 'ORIGIN::Последствие решения «'+res.data.originDecision+'» (ход '+res.data.originTurn+', «'+arcLabel+'»)::'+res.data.text;
+    const originText = 'ORIGIN::Вы решили «'+res.data.originDecision+'» (ход '+res.data.originTurn+', '+arcLabel+') — и вот что произошло::'+res.data.text;
     return { ...s, screen:"card", currentCard:{ id:"consequence", text:originText, options:[{label:"Понятно", effects:res.data.effects, matched:null}] },
       currentArc: res.data.originArc, isConsequence:true, isProRisk:false, isConditional:false, currentConditionalId:null };
   }
   if(res.type==="success"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null,
+    return { ...s, screen:"card", currentCard:shuffleOptions(res.data), currentArc:null,
       isConsequence:false, isProRisk:false, isConditional:true, currentConditionalId:res.data.id };
   }
   if(res.type==="background"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null,
+    return { ...s, screen:"card", currentCard:shuffleOptions(res.data), currentArc:null,
       isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:res.data.id };
   }
   if(res.type==="event"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
+    return { ...s, screen:"card", currentCard:shuffleOptions(res.data), currentArc:null, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
   }
   if(res.type==="prorisk"){
-    return { ...s, screen:"card", currentCard:res.data, currentArc:null, isConsequence:false, isProRisk:true, isConditional:false, currentConditionalId:null };
+    return { ...s, screen:"card", currentCard:shuffleOptions(res.data), currentArc:null, isConsequence:false, isProRisk:true, isConditional:false, currentConditionalId:null };
   }
-  return { ...s, screen:"card", currentCard:res.data, currentArc:res.arcKey, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
+  return { ...s, screen:"card", currentCard:shuffleOptions(res.data), currentArc:res.arcKey, isConsequence:false, isProRisk:false, isConditional:false, currentConditionalId:null };
 }
 
 /* ============ UI ============ */
@@ -392,8 +394,8 @@ function IntroBody({ dispatch, state }){
           ))}
         </div>
         <div className="diff-meta">
-          <span className="diff-chip">{cfg.arcCount} дела одновременно</span>
-          <span className="diff-chip">{cfg.detail==="full" ? "Полные варианты ответа" : "Краткие варианты ответа"}</span>
+          <span className="diff-chip" key={"count-"+cfg.arcCount}>{cfg.arcCount} дела одновременно</span>
+          <span className="diff-chip" key={"detail-"+cfg.detail}>{cfg.detail==="full" ? "Полные варианты ответа" : "Краткие варианты ответа"}</span>
         </div>
         <div className="diff-hint">{cfg.hint}</div>
         <div className="intro-rules" dangerouslySetInnerHTML={{__html:
@@ -423,11 +425,20 @@ function CardVisual({ visual }){
   const [failed, setFailed] = useState(false);
   useEffect(()=>{ setFailed(false); }, [visual.file]);
   const isPersona = visual.file.startsWith("persona-");
+  const isIcon = visual.file.startsWith("icon-");
   if(failed){
     return (
       <div className="card-visual">
         <div dangerouslySetInnerHTML={{__html: visual.icon}} />
         <div className="card-visual-label">[ЗАГЛУШКА] {visual.file} · {visual.size}</div>
+      </div>
+    );
+  }
+  if(isIcon){
+    return (
+      <div className="card-visual">
+        <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
+          style={{ width:"auto", height:"64%", maxWidth:"70%", objectFit:"contain" }} />
       </div>
     );
   }
@@ -466,8 +477,7 @@ function CardBody({ state, dispatch }){
       </div>
       <div className="options">
         {c.options.map((opt,idx)=>{
-          const split = splitLabel(opt.label);
-          const shown = state.detail==="full" ? split.full : split.short;
+          const shown = state.detail==="full" ? opt.label : (opt.shortLabel || opt.label);
           return (
             <button key={idx} className="option-btn" onClick={()=>dispatch({type:"CHOOSE", opt})}>
               <span className="option-letter">{String.fromCharCode(65+idx)}</span>{shown}
@@ -505,6 +515,8 @@ function GameOverBody({ state, dispatch }){
   const key = state.gameOver.counter+"_"+state.gameOver.dir;
   const info = BREACH_TEXT[key];
   const pct = state.matchedTotal? Math.round(100*state.matchedCount/state.matchedTotal):0;
+  const outcomes = state.selectedArcs.map(a=>arcOutcome(state, a.id));
+  const shareText = "УПРАВЛЯЮЩИЙ\n\n"+info.title+"\nПродержались: "+state.turn+" ходов\nСовпадение с практикой ВС РФ: "+pct+"%\n\nА вы продержитесь дольше? poluianov.ru";
   return (
     <>
       <div className="final-block">
@@ -515,6 +527,7 @@ function GameOverBody({ state, dispatch }){
         <div>Продержались: {state.turn} ходов</div>
         <div>Совпадение с практикой ВС: {pct}%</div>
       </div>
+      <ShareButton state={state} outcomes={outcomes} pct={pct} shareText={shareText}/>
       <button className="btn btn-primary" onClick={()=>dispatch({type:"RESTART"})}>Начать заново</button>
     </>
   );
