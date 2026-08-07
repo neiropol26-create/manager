@@ -438,9 +438,9 @@ function CardVisual({ visual }){
   }
   if(isIcon){
     return (
-      <div className={"card-visual"+modifier} style={{height:"110px"}}>
+      <div className={"card-visual"+modifier}>
         <img src={"/images/"+visual.file} alt="" onError={()=>setFailed(true)}
-          style={{ width:"auto", height:"auto", maxWidth:"75%", maxHeight:"75%", objectFit:"contain" }} />
+          style={{ width:"92%", height:"92%", objectFit:"contain" }} />
       </div>
     );
   }
